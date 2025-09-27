@@ -1,0 +1,5 @@
+{
+  "name": "Vibe Coder",
+  "description": "An AI-powered coding assistant that generates, previews, and refines web applications from a single prompt. It provides a file explorer, a live preview sandbox, and an interactive agent chat to bring your ideas to life.",
+  "requestFramePermissions": []
+}
