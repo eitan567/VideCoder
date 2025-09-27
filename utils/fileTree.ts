@@ -120,3 +120,52 @@ export const renameNodeByPath = (
 
   return { tree: newNodes };
 };
+
+/**
+ * Resolves a relative path from a base path, similar to how browsers handle URLs.
+ * @param basePath The directory path from which to resolve, e.g., "/src/pages".
+ * @param relativePath The path to resolve, e.g., "../styles/main.css".
+ * @returns The resolved absolute path, e.g., "/src/styles/main.css".
+ */
+export const resolvePath = (basePath: string, relativePath: string): string => {
+  if (relativePath.startsWith('/')) {
+    return relativePath; // It's already an absolute path from the root.
+  }
+
+  const baseParts = basePath.split('/').filter(p => p);
+  const relativeParts = relativePath.split('/').filter(p => p);
+  
+  const stack = [...baseParts];
+
+  for (const part of relativeParts) {
+    if (part === '..') {
+      stack.pop();
+    } else if (part !== '.') {
+      stack.push(part);
+    }
+  }
+
+  return '/' + stack.join('/');
+};
+
+/**
+ * Traverses a FileNode tree and creates a flat map of full file paths to their nodes.
+ * @param nodes The root of the file tree.
+ * @returns A Map where keys are full paths (e.g., "/src/index.js") and values are the corresponding FileNode objects.
+ */
+export const createFileMap = (nodes: FileNode[]): Map<string, FileNode> => {
+  const map = new Map<string, FileNode>();
+
+  function traverse(currentNodes: FileNode[], currentPath: string) {
+    for (const node of currentNodes) {
+      const nodePath = `${currentPath}/${node.name}`;
+      map.set(nodePath, node);
+      if (node.type === 'folder' && node.children) {
+        traverse(node.children, nodePath);
+      }
+    }
+  }
+
+  traverse(nodes, '');
+  return map;
+};

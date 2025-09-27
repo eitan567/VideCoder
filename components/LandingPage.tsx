@@ -6,10 +6,12 @@ import { AI_PROVIDERS } from '../constants';
 
 interface LandingPageProps {
   onProjectGenerated: (prompt: string, fileTree: FileNode[]) => void;
+  initialPrompt: string;
+  promptHistory: string[];
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onProjectGenerated }) => {
-  const [prompt, setPrompt] = useState('');
+const LandingPage: React.FC<LandingPageProps> = ({ onProjectGenerated, initialPrompt, promptHistory }) => {
+  const [prompt, setPrompt] = useState(initialPrompt || '');
   const [selectedProviderId, setSelectedProviderId] = useState<string>(AI_PROVIDERS[0].id);
   const [selectedModelId, setSelectedModelId] = useState<string>(AI_PROVIDERS[0].models[0].id);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,6 +38,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onProjectGenerated }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const handleHistoryClick = (historicPrompt: string) => {
+    setPrompt(historicPrompt);
   };
 
   return (
@@ -100,6 +106,23 @@ const LandingPage: React.FC<LandingPageProps> = ({ onProjectGenerated }) => {
             </button>
           </div>
         </div>
+         {promptHistory.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-sm text-gray-400 mb-2">Recent Prompts</h3>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {promptHistory.map((p, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleHistoryClick(p)}
+                  className="bg-gray-800 text-white text-sm px-3 py-1 border border-gray-600 rounded-full hover:bg-gray-700 hover:border-gray-500 transition-colors"
+                  title={p}
+                >
+                  <span className="truncate max-w-xs">{p.length > 50 ? `${p.substring(0, 50)}...` : p}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {error && <p className="text-red-400 mt-4">{error}</p>}
       </div>
     </div>

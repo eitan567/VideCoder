@@ -36,7 +36,6 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = (props) => {
   const { node, path, onFileSelect, activeFilePath, renamingPath, onInitiateRename, onCancelRename, onCommitRename } = props;
   const [isOpen, setIsOpen] = useState(true);
   const [newName, setNewName] = useState(node.name);
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentPath = `${path}/${node.name}`;
@@ -45,20 +44,11 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = (props) => {
 
   useEffect(() => {
     if (isRenaming) {
+      setNewName(node.name);
       inputRef.current?.focus();
       inputRef.current?.select();
     }
-  }, [isRenaming]);
-
-  useEffect(() => {
-    const handleClickOutside = () => setContextMenu(null);
-    if (contextMenu) {
-      document.addEventListener('click', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [contextMenu]);
+  }, [isRenaming, node.name]);
 
   const handleCommit = () => {
     if (newName.trim() && newName.trim() !== node.name) {
@@ -80,18 +70,6 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = (props) => {
     handleCommit();
   };
   
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  };
-  
-  const handleRenameClick = () => {
-    setContextMenu(null);
-    setNewName(node.name);
-    onInitiateRename(currentPath);
-  };
-  
   const handleNodeClick = () => {
     if (node.type === 'file') {
       onFileSelect(currentPath);
@@ -99,11 +77,17 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = (props) => {
       setIsOpen(!isOpen);
     }
   };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onInitiateRename(currentPath);
+  };
   
   return (
-    <div className="text-sm my-1 relative" onContextMenu={handleContextMenu}>
+    <div className="text-sm my-1 relative">
       <div
         onClick={handleNodeClick}
+        onDoubleClick={handleDoubleClick}
         className={`flex items-center p-1 rounded-md ${isRenaming ? '' : 'cursor-pointer'} ${
           isActive ? 'bg-blue-600/30 text-white' : 'text-gray-400 hover:bg-gray-800'
         }`}
@@ -137,20 +121,6 @@ const FileTreeNode: React.FC<FileTreeNodeProps> = (props) => {
               {...props}
             />
           ))}
-        </div>
-      )}
-
-      {contextMenu && (
-        <div 
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="absolute z-10 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1"
-        >
-          <button 
-            onClick={handleRenameClick}
-            className="block w-full text-left px-4 py-1 text-sm text-gray-300 hover:bg-gray-700"
-          >
-            Rename
-          </button>
         </div>
       )}
     </div>
