@@ -299,7 +299,7 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, providerId, mode
             }
           }
         });
-      <\/script>
+      </script>
     `;
     
     if (html.includes('</head>')) {
