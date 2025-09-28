@@ -283,30 +283,18 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, providerId, mode
     let html = htmlNode.content;
     const basePath = htmlFilePath.substring(0, htmlFilePath.lastIndexOf('/'));
 
-    const headInjection = `
-      <base href="${htmlFilePath}">
-      <script>
-        document.addEventListener('click', e => {
-          if (e.defaultPrevented) return;
-          const anchor = e.target.closest('a');
-          if (anchor && anchor.href) {
-            const targetUrl = new URL(anchor.href);
-            const isExternal = targetUrl.origin !== location.origin;
-            const isDownload = anchor.hasAttribute('download');
-            if (!isExternal && !isDownload) {
-              e.preventDefault();
-              window.parent.postMessage({ type: 'navigate', path: targetUrl.pathname }, '*');
-            }
-          }
-        });
-      </script>
-    `;
-    
-    if (html.includes('</head>')) {
-        html = html.replace('</head>', `${headInjection}</head>`);
-    } else {
-        html = headInjection + html;
-    }
+    // Temporarily disable script injection to test if it's causing the > character issue
+    // const headInjection = `<base href="${htmlFilePath}"><script>document.addEventListener('click', e => {if (e.defaultPrevented) return;const anchor = e.target.closest('a');if (anchor && anchor.href) {const targetUrl = new URL(anchor.href);const isExternal = targetUrl.origin !== location.origin;const isDownload = anchor.hasAttribute('download');if (!isExternal && !isDownload) {e.preventDefault();window.parent.postMessage({ type: 'navigate', path: targetUrl.pathname }, '*');}}});</script>`;
+
+    // if (html.includes('</head>')) {
+    //     html = html.replace('</head>', `${headInjection}</head>`);
+    // } else if (html.includes('<body')) {
+    //     // Insert before body tag if no head closing tag
+    //     html = html.replace('<body', `${headInjection}<body`);
+    // } else {
+    //     // Fallback: add to the beginning if no head or body tags found
+    //     html = headInjection + html;
+    // }
 
     // Find and replace local CSS <link> tags with <style> tags
     const linkRegex = /<link[^>]+?href="([^"]+)"/gi;
