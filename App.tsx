@@ -9,7 +9,8 @@ type AppState = {
 } | {
   view: 'editor';
   initialPrompt: string;
-  initialFileTree: FileNode[];
+  providerId: string;
+  modelId: string;
 };
 
 const PROMPT_HISTORY_KEY = 'vibeCoder_promptHistory';
@@ -37,7 +38,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleProjectGenerated = useCallback((prompt: string, fileTree: FileNode[]) => {
+  const handleStartGeneration = useCallback((prompt: string, providerId: string, modelId: string) => {
     setLastPrompt(prompt);
 
     setPromptHistory(prevHistory => {
@@ -53,9 +54,10 @@ const App: React.FC = () => {
     setAppState({
       view: 'editor',
       initialPrompt: prompt,
-      initialFileTree: fileTree,
+      providerId,
+      modelId,
     });
-  }, []);
+  }, []); // Remove dependencies to prevent recreation
   
   const handleBackToHome = useCallback(() => {
     setAppState({ view: 'landing' });
@@ -65,7 +67,7 @@ const App: React.FC = () => {
     <div className="min-h-screen font-sans">
       {appState.view === 'landing' && (
         <LandingPage
-          onProjectGenerated={handleProjectGenerated}
+          onStartGeneration={handleStartGeneration}
           initialPrompt={lastPrompt}
           promptHistory={promptHistory}
         />
@@ -73,7 +75,8 @@ const App: React.FC = () => {
       {appState.view === 'editor' && (
         <EditorPage
           initialPrompt={appState.initialPrompt}
-          initialFileTree={appState.initialFileTree}
+          providerId={appState.providerId}
+          modelId={appState.modelId}
           onBackToHome={handleBackToHome}
         />
       )}

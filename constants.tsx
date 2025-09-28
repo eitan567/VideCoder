@@ -10,6 +10,16 @@ export const AI_PROVIDERS: Provider[] = [
     ],
   },
   {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    models: [], // Will be populated dynamically
+  },
+  {
+    id: 'kilocode',
+    name: 'KiloCode',
+    models: [], // Will be populated dynamically
+  },
+  {
     id: 'openai',
     name: 'OpenAI (Coming Soon)',
     models: [

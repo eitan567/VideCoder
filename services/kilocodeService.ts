@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import { FileNode } from "../types";
 
 const SYSTEM_PROMPT = `You are an expert web developer AI. Your task is to generate a complete web application project based on a user's prompt.
@@ -53,13 +52,11 @@ const hasIndexHtmlAtRoot = (nodes: FileNode[]): boolean => {
     return nodes.some(node => node.name === 'index.html' && node.type === 'file');
 };
 
-export const generateProject = async (prompt: string): Promise<FileNode[]> => {
+export const generateProjectWithKiloCode = async (prompt: string, model: string): Promise<FileNode[]> => {
   try {
-    console.log('Checking API key...');
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable not set");
+    if (!process.env.KILOCODE_API_KEY) {
+      throw new Error("KILOCODE_API_KEY environment variable not set");
     }
-    console.log('API key found, proceeding with generation...');
 
     const TIMEOUT_MS = 60000; // 60-second timeout
     const MAX_RESPONSE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB limit to prevent browser freeze
@@ -71,29 +68,58 @@ export const generateProject = async (prompt: string): Promise<FileNode[]> => {
     });
 
     const generationLogic = async (): Promise<FileNode[]> => {
-        console.log('Initializing GoogleGenAI...');
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        console.log('GoogleGenAI initialized successfully.');
-
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: `Generate the project for this user request: "${prompt}"`,
-          config: {
-            systemInstruction: SYSTEM_PROMPT,
+        console.log('Initializing KiloCode generation...');
+        const response = await fetch('/kilocode-api/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': process.env.KILOCODE_API_KEY, // No "Bearer " prefix for KiloCode
+            'Content-Type': 'application/json',
+            'HTTP-Referer': window.location.origin,
+            'X-Title': 'Vibe Coder'
           },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: `Generate the project for this user request: "${prompt}"` }
+            ],
+            max_tokens: 4000,
+            temperature: 0.7
+          })
         });
 
-        console.log('Received response from AI...');
-        const jsonText = response.text;
+        if (!response.ok) {
+          let errorMessage = 'Unknown error';
+          try {
+            const errorText = await response.text();
+            console.error('KiloCode raw error response:', errorText);
+            try {
+              const errorData = JSON.parse(errorText);
+              errorMessage = errorData.error?.message || errorText;
+            } catch {
+              errorMessage = errorText.substring(0, 200) + (errorText.length > 200 ? '...' : '');
+            }
+          } catch (parseError) {
+            console.error('Failed to parse KiloCode error response:', parseError);
+            errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          }
+          if (response.status === 401) {
+            errorMessage = 'Invalid or missing KILOCODE_API_KEY. Please check your .env.local file.';
+          }
+          throw new Error(`KiloCode API error: ${response.status} - ${errorMessage}`);
+        }
+
+        const data = await response.json();
+        const jsonText = data.choices[0]?.message?.content;
+
         if (!jsonText) {
             throw new Error("The AI model returned an empty response. This might be due to content moderation filters or an internal error.");
         }
-        console.log('Response text length:', jsonText.length);
 
         if (jsonText.length > MAX_RESPONSE_SIZE_BYTES) {
           throw new Error(`The AI model returned an excessively large response (${(jsonText.length / 1024 / 1024).toFixed(2)} MB), which could cause the application to freeze. Aborting generation.`);
         }
-        
+
         // The model sometimes wraps the JSON in markdown, so we need to strip it.
         let cleanedJsonText = jsonText.trim();
         if (cleanedJsonText.startsWith('```json')) {
@@ -102,13 +128,13 @@ export const generateProject = async (prompt: string): Promise<FileNode[]> => {
                 cleanedJsonText = cleanedJsonText.slice(0, -3);
             }
         }
-        
+
         let generatedFiles;
         try {
             generatedFiles = JSON.parse(cleanedJsonText);
-            console.log('JSON parsed successfully, files generated:', generatedFiles.length);
+            console.log('KiloCode JSON parsed successfully, files generated:', generatedFiles.length);
         } catch (e) {
-            console.error("Failed to parse JSON response:", cleanedJsonText);
+            console.error("Failed to parse KiloCode JSON response:", cleanedJsonText);
             throw new Error("The AI model returned an invalid JSON structure.");
         }
 
@@ -123,16 +149,16 @@ export const generateProject = async (prompt: string): Promise<FileNode[]> => {
 
         return generatedFiles as FileNode[];
     };
-    
+
     return await Promise.race([generationLogic(), timeoutPromise]);
 
   } catch (error) {
-    console.error("Error generating project:", error);
+    console.error("Error generating project with KiloCode:", error);
     let errorMessage = "An unknown error occurred while generating the project.";
     if (error instanceof Error) {
         errorMessage = error.message;
     }
-    console.log('Generation failed, returning error log file.');
+    console.log('KiloCode generation failed, returning error log file.');
     // Return a dummy error file structure
     return [
         {

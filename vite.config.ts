@@ -8,11 +8,21 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/kilocode-api': {
+            target: 'https://kilocode.ai',
+            changeOrigin: true,
+            secure: true,
+            rewrite: (path) => path.replace(/^\/kilocode-api/, '/api/openrouter')
+          }
+        }
       },
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.OPENROUTER_API_KEY': JSON.stringify(env.OPENROUTER_API_KEY),
+        'process.env.KILOCODE_API_KEY': JSON.stringify(env.KILOCODE_API_KEY)
       },
       resolve: {
         alias: {

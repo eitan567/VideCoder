@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { generateProject } from '../services/geminiService';
+import { generateProjectWithOpenRouter } from '../services/openRouterService';
+import { generateProjectWithKiloCode } from '../services/kilocodeService';
 import { FileNode, OpenFile, AgentStatus, AgentLog } from '../types';
 import FileExplorer from './FileExplorer';
 import CenterPanel from './CenterPanel';
@@ -8,7 +11,8 @@ import { updateFileContent, renameNodeByPath, resolvePath, createFileMap } from 
 
 interface EditorPageProps {
   initialPrompt: string;
-  initialFileTree: FileNode[];
+  providerId: string;
+  modelId: string;
   onBackToHome: () => void;
 }
 
@@ -18,8 +22,10 @@ const DownloadIcon = () => (
     </svg>
 );
 
-const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree, onBackToHome }) => {
-  const [fileTree, setFileTree] = useState<FileNode[]>(initialFileTree);
+const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, providerId, modelId, onBackToHome }) => {
+  const [fileTree, setFileTree] = useState<FileNode[]>([]);
+  const [isGenerating, setIsGenerating] = useState(true);
+  const [hasGenerationError, setHasGenerationError] = useState(false);
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string>('');
@@ -29,8 +35,8 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree,
   
   const [agentStatus, setAgentStatus] = useState<AgentStatus>('idle');
   const [agentLogs, setAgentLogs] = useState<AgentLog[]>([
-    { id: 1, type: 'user', text: `Initial prompt: ${initialPrompt}` },
-    { id: 2, type: 'action', text: 'Project generated successfully.' }
+    { id: 1, type: 'user', text: `Generating project for: ${initialPrompt}` },
+    { id: 2, type: 'thought', text: 'Initializing AI generation...' }
   ]);
   
   const initialFileOpened = useRef(false);
@@ -53,8 +59,212 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree,
     setActiveFilePath(path);
   }, [fileMap, openFiles]);
 
+  const hasGenerated = useRef(false);
+
   useEffect(() => {
-    if (initialFileTree && !initialFileOpened.current) {
+    const generateAndSetTree = async () => {
+      if (fileTree.length === 0 && !hasGenerated.current) {
+        hasGenerated.current = true;
+        console.log('Starting project generation in EditorPage...');
+        setAgentLogs(prev => [...prev, { id: Date.now(), type: 'action', text: 'Calling AI API...' }]);
+
+        // Simulate progress with placeholders
+        const simulationInterval = setInterval(() => {
+          setFileTree(prev => {
+            if (prev.length < 3) {
+              return [...prev, {
+                name: `loading-step-${prev.length + 1}`,
+                type: 'folder' as const,
+                children: [{ name: 'temp.js', type: 'file' as const, content: '// Loading...' }]
+              }];
+            }
+            return prev;
+          });
+        }, 1000);
+
+        try {
+          let result: FileNode[];
+          if (providerId === 'google') {
+            result = await generateProject(initialPrompt);
+          } else if (providerId === 'openrouter') {
+            result = await generateProjectWithOpenRouter(initialPrompt, modelId);
+          } else if (providerId === 'kilocode') {
+            result = await generateProjectWithKiloCode(initialPrompt, modelId);
+          } else {
+            throw new Error(`Unsupported provider: ${providerId}`);
+          }
+          clearInterval(simulationInterval);
+
+          if (result.length > 0 && result[0].name === 'error.log') {
+            const errorContent = result[0].content || 'Unknown error';
+            const isQuotaError = errorContent.includes('429') || errorContent.includes('quota exceeded');
+            const userFriendlyMsg = isQuotaError
+              ? 'API quota exceeded. You\'ve reached your daily limit of 250 free requests. Please wait for reset or upgrade your plan.'
+              : `Generation error: ${errorContent}`;
+            setAgentLogs(prev => [...prev, { id: Date.now() + 1, type: 'error', text: userFriendlyMsg }]);
+            setFileTree([{ name: 'error.log', type: 'file' as const, content: errorContent }]);
+            setHasGenerationError(true);
+          } else {
+            setAgentLogs(prev => [...prev, { id: Date.now() + 1, type: 'action', text: 'Received response from AI. Now processing and creating files/folders...' }]);
+            await processGeneratedFiles(result);
+            setAgentLogs(prev => [...prev, { id: Date.now() + 2, type: 'action', text: 'Project files generated successfully!' }]);
+            setHasGenerationError(false);
+          }
+        } catch (e) {
+          clearInterval(simulationInterval);
+          const errorMsg = e instanceof Error ? e.message : 'Unknown error';
+          const isQuotaError = errorMsg.includes('429') || errorMsg.includes('quota exceeded') || errorMsg.includes('RESOURCE_EXHAUSTED');
+          const userFriendlyMsg = isQuotaError
+            ? 'API quota exceeded. You\'ve reached your daily limit of 250 free requests. Please wait for reset or upgrade your plan.'
+            : `Generation failed: ${errorMsg}`;
+          setAgentLogs(prev => [...prev, { id: Date.now() + 1, type: 'error', text: userFriendlyMsg }]);
+          setFileTree([{ name: 'error.log', type: 'file' as const, content: `Error: ${errorMsg}` }]);
+          setHasGenerationError(true);
+        } finally {
+          // Ensure isGenerating is set to false after all other operations complete
+          setIsGenerating(false);
+          console.log('Project generation complete in EditorPage.');
+        }
+      }
+    };
+
+    generateAndSetTree();
+  }, []); // Empty dependency array since we only want this to run once
+
+  const retryGeneration = useCallback(async () => {
+    hasGenerated.current = false; // Reset the generation flag for retry
+    setHasGenerationError(false);
+    setIsGenerating(true);
+    setFileTree([]);
+    setAgentLogs(prev => [...prev, { id: Date.now(), type: 'action', text: 'Retrying generation...' }]);
+    // Re-run the generation logic with current provider and model
+    const simulationInterval = setInterval(() => {
+      setFileTree(prev => {
+        if (prev.length < 3) {
+          return [...prev, {
+            name: `loading-step-${prev.length + 1}`,
+            type: 'folder' as const,
+            children: [{ name: 'temp.js', type: 'file' as const, content: '// Loading...' }]
+          }];
+        }
+        return prev;
+      });
+    }, 1000);
+
+    try {
+      let result: FileNode[];
+      if (providerId === 'google') {
+        result = await generateProject(initialPrompt);
+      } else if (providerId === 'openrouter') {
+        result = await generateProjectWithOpenRouter(initialPrompt, modelId);
+      } else if (providerId === 'kilocode') {
+        result = await generateProjectWithKiloCode(initialPrompt, modelId);
+      } else {
+        throw new Error(`Unsupported provider: ${providerId}`);
+      }
+      clearInterval(simulationInterval);
+
+      if (result.length > 0 && result[0].name === 'error.log') {
+        const errorContent = result[0].content || 'Unknown error';
+        const isQuotaError = errorContent.includes('429') || errorContent.includes('quota exceeded');
+        const userFriendlyMsg = isQuotaError
+          ? 'API quota exceeded. You\'ve reached your daily limit of 250 free requests. Please wait for reset or upgrade your plan.'
+          : `Generation error: ${errorContent}`;
+        setAgentLogs(prev => [...prev, { id: Date.now() + 1, type: 'error', text: userFriendlyMsg }]);
+        setFileTree([{ name: 'error.log', type: 'file' as const, content: errorContent }]);
+        setHasGenerationError(true);
+      } else {
+        setAgentLogs(prev => [...prev, { id: Date.now() + 1, type: 'action', text: 'Received response from AI. Now processing and creating files/folders...' }]);
+        await processGeneratedFiles(result);
+        setAgentLogs(prev => [...prev, { id: Date.now() + 2, type: 'action', text: 'Project files generated successfully!' }]);
+        setHasGenerationError(false);
+      }
+    } catch (e) {
+      clearInterval(simulationInterval);
+      const errorMsg = e instanceof Error ? e.message : 'Unknown error';
+      const isQuotaError = errorMsg.includes('429') || errorMsg.includes('quota exceeded') || errorMsg.includes('RESOURCE_EXHAUSTED');
+      const userFriendlyMsg = isQuotaError
+        ? 'API quota exceeded. You\'ve reached your daily limit of 250 free requests. Please wait for reset or upgrade your plan.'
+        : `Generation failed: ${errorMsg}`;
+      setAgentLogs(prev => [...prev, { id: Date.now() + 1, type: 'error', text: userFriendlyMsg }]);
+      setFileTree([{ name: 'error.log', type: 'file' as const, content: `Error: ${errorMsg}` }]);
+      setHasGenerationError(true);
+    } finally {
+      setIsGenerating(false);
+      console.log('Project generation complete in EditorPage.');
+    }
+  }, [initialPrompt, providerId, modelId]);
+
+  const processGeneratedFiles = async (nodes: FileNode[]) => {
+    try {
+      setFileTree(nodes); // Set full tree immediately for explorer visibility
+
+      // Traverse recursively and log each node with delay for progress in logs
+      function logNodes(currentNodes: FileNode[], currentPath: string) {
+        let index = 0;
+        const logNext = () => {
+          if (index < currentNodes.length) {
+            const node = currentNodes[index];
+            const fullPath = currentPath ? `${currentPath}/${node.name}` : `/${node.name}`;
+            setAgentLogs((prevLogs: AgentLog[]) => [...prevLogs, {
+              id: Date.now() + Math.random(),
+              type: 'action' as const,
+              text: `Creating ${node.type}: ${fullPath}`
+            }]);
+            index++;
+            setTimeout(logNext, 150); // Delay between logs for visibility
+          } else if (currentPath) {
+            // Backtrack if needed, but since recursive, call children first
+            // Actually, to handle children, call logNodes on children before next sibling
+            // Revised: Use a queue for sequential traversal
+          }
+        };
+        logNext();
+      }
+
+      // For simplicity, flatten and log sequentially with delays
+      const allNodes: { node: FileNode; fullPath: string }[] = [];
+      function collectNodes(currentNodes: FileNode[], currentPath: string) {
+        currentNodes.forEach(node => {
+          const fullPath = currentPath ? `${currentPath}/${node.name}` : `/${node.name}`;
+          allNodes.push({ node, fullPath });
+          if (node.type === 'folder' && node.children) {
+            collectNodes(node.children, fullPath);
+          }
+        });
+      }
+      collectNodes(nodes, '');
+
+      // Sort folders before files
+      allNodes.sort((a, b) => a.node.type === 'folder' && b.node.type === 'file' ? -1 : (a.node.type === 'file' && b.node.type === 'folder' ? 1 : 0));
+
+      let logIndex = 0;
+      const logNextNode = () => {
+        if (logIndex < allNodes.length) {
+          const { node, fullPath } = allNodes[logIndex];
+          setAgentLogs((prevLogs: AgentLog[]) => [...prevLogs, {
+            id: Date.now() + Math.random(),
+            type: 'action' as const,
+            text: `Creating ${node.type}: ${fullPath}`
+          }]);
+          logIndex++;
+          setTimeout(logNextNode, 150);
+        }
+      };
+      logNextNode();
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown processing error';
+      setAgentLogs((prev: AgentLog[]) => [...prev, {
+        id: Date.now() + Math.random(),
+        type: 'error' as const,
+        text: `Error during file creation process: ${errorMsg}`
+      }]);
+    }
+  };
+
+  useEffect(() => {
+    if (!isGenerating && fileTree.length > 0 && !initialFileOpened.current) {
         const indexHtmlPath = '/index.html';
         const indexHtmlNode = fileMap.get(indexHtmlPath);
         if (indexHtmlNode) {
@@ -62,7 +272,7 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree,
             initialFileOpened.current = true;
         }
     }
-  }, [initialFileTree, handleFileSelect, fileMap]);
+  }, [fileTree, isGenerating, handleFileSelect, fileMap]);
   
   const buildPreviewHtml = useCallback((htmlFilePath: string, allFilesMap: Map<string, FileNode>): string => {
     const htmlNode = allFilesMap.get(htmlFilePath);
@@ -331,14 +541,33 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree,
     }
   };
 
+  if (isGenerating) {
+    return (
+      <div className="h-screen w-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-white mb-2">Generating Your Project</h2>
+          <p className="text-gray-400">This may take a moment while the AI creates your files...</p>
+          <div className="mt-4 flex justify-center">
+            <div className="animate-pulse space-x-1">
+              <div className="h-3 w-3 bg-blue-500 rounded-full"></div>
+              <div className="h-3 w-3 bg-blue-500 rounded-full"></div>
+              <div className="h-3 w-3 bg-blue-500 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen w-screen bg-gray-950 text-white flex flex-col">
       <header className="flex items-center justify-between p-2 border-b border-gray-800 bg-gray-900 flex-shrink-0">
         <h1 className="text-xl font-bold">Vibe Coder</h1>
         <div className="flex items-center space-x-2">
-            <button 
-                onClick={handleDownloadProject} 
-                disabled={isDownloading}
+            <button
+                onClick={handleDownloadProject}
+                disabled={isDownloading || fileTree.length === 0}
                 className="text-sm flex items-center bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded-md disabled:opacity-50 disabled:cursor-wait"
             >
                 {isDownloading ? (
@@ -365,8 +594,8 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree,
         {/* Top section: Explorer, Editor, Preview */}
         <div className="flex-1 flex overflow-hidden">
           <div className="w-[250px] flex-shrink-0 h-full border-r border-gray-800">
-            <FileExplorer 
-              fileTree={fileTree} 
+            <FileExplorer
+              fileTree={fileTree}
               onFileSelect={handleFileSelect}
               activeFilePath={activeFilePath}
               renamingPath={renamingPath}
@@ -377,7 +606,7 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree,
           </div>
           <div className="flex-1 flex min-w-0">
               <div className="w-1/2 h-full border-r border-gray-800">
-                  <CenterPanel 
+                  <CenterPanel
                     openFiles={openFiles}
                     activeFilePath={activeFilePath}
                     onFileContentChange={handleFileContentChange}
@@ -388,9 +617,9 @@ const EditorPage: React.FC<EditorPageProps> = ({ initialPrompt, initialFileTree,
                   />
               </div>
               <div className="w-1/2 h-full">
-                  <PreviewPanel 
-                      htmlContent={htmlContent} 
-                      onRefresh={handleManualRefresh} 
+                  <PreviewPanel
+                      htmlContent={htmlContent}
+                      onRefresh={handleManualRefresh}
                       agentStatus={agentStatus}
                   />
               </div>

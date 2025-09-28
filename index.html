@@ -23,41 +23,32 @@
         }
       }
     </script>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.21.0",
-    "react/": "https://aistudiocdn.com/react@^19.1.1/",
-    "react": "https://aistudiocdn.com/react@^19.1.1"
-  }
-}
-</script>
 </head>
   <body class="bg-gray-950 text-gray-300">
     <div id="root"></div>
+    <script>console.log('HTML loaded');</script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
     <script>
       require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' }});
-      // This configuration is crucial for loading Monaco's web workers correctly from a CDN.
       window.MonacoEnvironment = {
         getWorkerUrl: function (moduleId, label) {
           if (label === 'json') {
-            return './vs/language/json/json.worker.js';
+            return 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/language/json/json.worker.js';
           }
           if (label === 'css' || label === 'scss' || label === 'less') {
-            return './vs/language/css/css.worker.js';
+            return 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/language/css/css.worker.js';
           }
           if (label === 'html' || label === 'handlebars' || label === 'razor') {
-            return './vs/language/html/html.worker.js';
+            return 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/language/html/html.worker.js';
           }
           if (label === 'typescript' || label === 'javascript') {
-            return './vs/language/typescript/ts.worker.js';
+            return 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/language/typescript/ts.worker.js';
           }
-          return './vs/editor/editor.worker.js';
+          return 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/editor/editor.worker.js';
         }
       };
     </script>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

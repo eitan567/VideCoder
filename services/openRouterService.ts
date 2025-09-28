@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import { FileNode } from "../types";
 
 const SYSTEM_PROMPT = `You are an expert web developer AI. Your task is to generate a complete web application project based on a user's prompt.
@@ -53,13 +52,11 @@ const hasIndexHtmlAtRoot = (nodes: FileNode[]): boolean => {
     return nodes.some(node => node.name === 'index.html' && node.type === 'file');
 };
 
-export const generateProject = async (prompt: string): Promise<FileNode[]> => {
+export const generateProjectWithOpenRouter = async (prompt: string, model: string): Promise<FileNode[]> => {
   try {
-    console.log('Checking API key...');
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY environment variable not set");
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY environment variable not set");
     }
-    console.log('API key found, proceeding with generation...');
 
     const TIMEOUT_MS = 60000; // 60-second timeout
     const MAX_RESPONSE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB limit to prevent browser freeze
@@ -71,24 +68,37 @@ export const generateProject = async (prompt: string): Promise<FileNode[]> => {
     });
 
     const generationLogic = async (): Promise<FileNode[]> => {
-        console.log('Initializing GoogleGenAI...');
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        console.log('GoogleGenAI initialized successfully.');
-
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: `Generate the project for this user request: "${prompt}"`,
-          config: {
-            systemInstruction: SYSTEM_PROMPT,
+        console.log('Initializing OpenRouter generation...');
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': window.location.origin,
+            'X-Title': 'Vibe Coder'
           },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: `Generate the project for this user request: "${prompt}"` }
+            ],
+            max_tokens: 4000,
+            temperature: 0.7
+          })
         });
 
-        console.log('Received response from AI...');
-        const jsonText = response.text;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`OpenRouter API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+        }
+
+        const data = await response.json();
+        const jsonText = data.choices[0]?.message?.content;
+
         if (!jsonText) {
             throw new Error("The AI model returned an empty response. This might be due to content moderation filters or an internal error.");
         }
-        console.log('Response text length:', jsonText.length);
 
         if (jsonText.length > MAX_RESPONSE_SIZE_BYTES) {
           throw new Error(`The AI model returned an excessively large response (${(jsonText.length / 1024 / 1024).toFixed(2)} MB), which could cause the application to freeze. Aborting generation.`);
@@ -106,9 +116,9 @@ export const generateProject = async (prompt: string): Promise<FileNode[]> => {
         let generatedFiles;
         try {
             generatedFiles = JSON.parse(cleanedJsonText);
-            console.log('JSON parsed successfully, files generated:', generatedFiles.length);
+            console.log('OpenRouter JSON parsed successfully, files generated:', generatedFiles.length);
         } catch (e) {
-            console.error("Failed to parse JSON response:", cleanedJsonText);
+            console.error("Failed to parse OpenRouter JSON response:", cleanedJsonText);
             throw new Error("The AI model returned an invalid JSON structure.");
         }
 
@@ -127,12 +137,12 @@ export const generateProject = async (prompt: string): Promise<FileNode[]> => {
     return await Promise.race([generationLogic(), timeoutPromise]);
 
   } catch (error) {
-    console.error("Error generating project:", error);
+    console.error("Error generating project with OpenRouter:", error);
     let errorMessage = "An unknown error occurred while generating the project.";
     if (error instanceof Error) {
         errorMessage = error.message;
     }
-    console.log('Generation failed, returning error log file.');
+    console.log('OpenRouter generation failed, returning error log file.');
     // Return a dummy error file structure
     return [
         {

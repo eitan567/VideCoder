@@ -6,9 +6,11 @@ interface AgentViewProps {
   logs: AgentLog[];
   status: AgentStatus;
   onAgentRequest: (request: string) => Promise<void>;
+  hasGenerationError?: boolean;
+  onRetry?: () => void;
 }
 
-const AgentView: React.FC<AgentViewProps> = ({ logs, status, onAgentRequest }) => {
+const AgentView: React.FC<AgentViewProps> = ({ logs, status, onAgentRequest, hasGenerationError, onRetry }) => {
   const [input, setInput] = useState('');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +47,16 @@ const AgentView: React.FC<AgentViewProps> = ({ logs, status, onAgentRequest }) =
         {logs.map(log => (
           <div key={log.id} className={`p-3 rounded-md text-sm ${getLogStyle(log.type)}`}>
             <pre className="whitespace-pre-wrap font-sans">{log.text}</pre>
+            {log.type === 'error' && onRetry && (
+              <div className="mt-2">
+                <button
+                  onClick={onRetry}
+                  className="w-full px-3 py-1.5 bg-blue-600 text-white rounded-md font-semibold text-sm hover:bg-blue-700 transition-colors mt-2"
+                >
+                  Retry Generation
+                </button>
+              </div>
+            )}
           </div>
         ))}
          {status === 'working' && (
