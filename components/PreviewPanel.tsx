@@ -32,7 +32,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onRefresh, age
         srcDoc={htmlContent}
         title="Preview"
         className="w-full h-full border-0 bg-white"
-        sandbox="allow-scripts allow-same-origin"
+        sandbox="allow-scripts allow-same-origin allow-modals"
       />
     </div>
   );
